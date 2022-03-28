@@ -37,7 +37,9 @@ w_map <- st_as_sf(map("world", plot = FALSE, fill = TRUE)) |>
                              ID=='Ivory Coast'~'CÃƒÂ´te dÃ¢â‚¬â„¢Ivoire',
                              TRUE~ID))
 
-# mergeing geom data and Freedom house Data, rescaling the meaurments such that high score= high freedom
+# merging geom data and Freedom house Data, re scaling the measurements such that high score= high freedom
+# see: https://freedomhouse.org/reports/freedom-world/faq-freedom-world#A10
+
 df_country <- df |> 
     select(country, year, CL, PR) |> 
     filter(year %in% c(1995, 2020)) |> 
@@ -46,38 +48,67 @@ df_country <- df |>
            cl_2020_raw=cl_2020,
            cl_1995=abs(cl_1995-8),
            cl_2020=abs(cl_2020-8),
-           cl_chagne=cl_2020/cl_1995-1) |> 
+           cl_chagne=cl_2020-cl_1995) |> 
     full_join(w_map, by=c("country"="country"))
-
-# ggplot(data = df_country)+
-#     geom_sf(aes(geometry=geom, color=cl_chagne, fill=cl_chagne))+
-#     coord_sf()+
-#     ggthemes::theme_map(base_size = 14) 
-    
 
 # Create interactive map
 
+# TODO - fix country specific plots - throws error, looks like there is a problem in the creation of ggplot list-col
+# very helpful resource: https://stackoverflow.com/questions/61686111/how-to-fix-distorted-interactive-popup-of-ggplot-figure-in-leaflet-map
+
+# country_plots <- df |>
+#     nest(-country) |> 
+#     full_join(w_map, by=c("country"="country"))    |> 
+#     select(country, data) |> 
+#     mutate(ggp = purrr::map2(.x = data, .y=country,
+#                             .f = ~ggplot(data = .x, aes(x=.x$year, y=.x$CL)) +
+#                                 geom_line( color="steelblue")+
+#                                 geom_point( color="steelblue")+
+#                                 labs(x=NULL,
+#                                      y="Civil Liberties",
+#                                      title = glue::glue("Civil Liberties Score {.y}")) + 
+#                                 theme_bw()))
+#     
+    
+
 CivilLibertiesChange <- df_country |>
-    mutate(cl_chagne=cl_chagne*100,
-           rank_2020=ntile(cl_2020,n = 10)) |> 
-    select(-ID) |> 
+    # full_join(country_plots, by=c("country"="country")) |> 
+    
+    mutate(rank_2020=ntile(cl_2020,n = 10)) |> 
+    select(-ID, -ends_with("raw")) |> 
     rename('Civil_Liberties_Change_1995_2020'=cl_chagne,
            Civil_Liberties_1995=cl_1995,
            Civil_Liberties_2020=cl_2020) |> 
     st_as_sf()
 
+# CivilLibertiesChange |> as_tibble() |> filter(is.na(rank_2020)) |> view()
 mapview::mapview(CivilLibertiesChange,
-                 at = seq(from=-100, to=100, by=50),
+                 at = seq(from=min(df_country$cl_chagne, na.rm = T), 
+                          to=max(df_country$cl_chagne, na.rm = T), 
+                          by=1),
                  layer.name ='Civil Liberties Change between 1995-2020, percent', 
-                 zcol='Civil_Liberties_Change_1995_2020', 
-                 popup = leafpop::popupTable(CivilLibertiesChange,
-                                             feature.id = F,
-                                             row.numbers = F, 
-                                             zcol=c('country', 
-                                                    'Civil_Liberties_1995', 
-                                                    'Civil_Liberties_2020', 
-                                                    'Civil_Liberties_Change_1995_2020')))
+                 zcol='Civil_Liberties_Change_1995_2020')
 
-# Manualy check countries that didn't merge in the first round
+# TODO - after fixing the country charts, figure out which one to put in the map
+# ,
+#                  leafpop::popupTable(CivilLibertiesChange,
+#                                      feature.id = F,
+#                                      row.numbers = F, 
+#                                      zcol=c('country', 
+#                                             'Civil_Liberties_1995', 
+#                                             'Civil_Liberties_2020', 
+#                                             'Civil_Liberties_Change_1995_2020')))
+
+                 
+                 
+                 # popup = leafpop::popupGraph(CivilLibertiesChange$ggp))
+                     
+                     
+                     
+                     
+                     
+                     
+
+# Manual check countries that didn't merge in the first round
 # df_check <- anti_join(df_country,w_map, by=c("country"="country"))
     
